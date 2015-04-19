@@ -54,7 +54,7 @@ ifeq ($(HOSTARCH),ppc)
 CROSS_COMPILE =
 else
 ifeq ($(ARCH),ppc)
-CROSS_COMPILE = powerpc-linux-
+CROSS_COMPILE = ppc_6xx-
 endif
 ifeq ($(ARCH),arm)
 CROSS_COMPILE = arm-linux-
@@ -142,6 +142,40 @@ ALL = u-boot.srec u-boot.bin System.map
 
 all:		$(ALL)
 
+LSMODEL := $(shell head -n 1 include/config.h)
+
+linkstation_HGLAN_RAM: include/config.h
+	@[ -n "$(findstring HGLAN_RAM, $(LSMODEL))" ] || \
+		{ echo "Bad configuration: $(LSMODEL)" ; \
+		  exit 1 ; \
+		}
+	@make all
+	@mv u-boot.bin u-boot-hg.ram.bin
+
+linkstation_HGLAN: include/config.h
+	@[ -n "$(findstring HGLAN_ROM, $(LSMODEL))" ] || \
+		{ echo "Bad configuration: $(LSMODEL)" ; \
+		  exit 1 ; \
+		}
+	@make all
+	@mv u-boot.bin u-boot-hg.flash.bin
+
+linkstation_HDLAN_RAM: include/config.h
+	@[ -n "$(findstring HDLAN_RAM, $(LSMODEL))" ] || \
+		{ echo "Bad configuration: $(LSMODEL)" ; \
+		  exit 1 ; \
+		}
+	@make all
+	@mv u-boot.bin u-boot-hd.ram.bin
+
+linkstation_HDLAN: include/config.h
+	@[ -n "$(findstring HDLAN_ROM, $(LSMODEL))" ] || \
+		{ echo "Bad configuration: $(LSMODEL)" ; \
+		  exit 1 ; \
+		}
+	@make all
+	@mv u-boot.bin u-boot-hd.flash.bin
+
 u-boot.hex:	u-boot
 		$(OBJCOPY) ${OBJCFLAGS} -O ihex $< $@
 
@@ -200,6 +234,10 @@ System.map:	u-boot
 
 #########################################################################
 else
+linkstation_HGLAN_RAM	\
+linkstation_HGLAN	\
+linkstation_HDLAN_RAM	\
+linkstation_HDLAN	\
 all install u-boot u-boot.srec depend dep:
 	@echo "System not configured - see README" >&2
 	@ exit 1
@@ -971,6 +1009,38 @@ eXalion_config: unconfig
 
 HIDDEN_DRAGON_config: unconfig
 	@./mkconfig $(@:_config=) ppc mpc824x hidden_dragon
+
+linkstation_HGLAN_RAM_config: mrproper
+	@>include/config.h ; \
+	echo "/* HGLAN_RAM */" >>include/config.h ; \
+	echo "#define CONFIG_HGLAN 1" >>include/config.h ; \
+	echo "TEXT_BASE = 0x07F00000" >board/linkstation/config.tmp ; \
+	./mkconfig -a linkstation ppc mpc824x linkstation ; \
+	echo "LinkStation HGLAN -- RAM BUILD ..."
+
+linkstation_HGLAN_config: mrproper
+	@>include/config.h ; \
+	echo "/* HGLAN_ROM */" >>include/config.h ; \
+	echo "#define CONFIG_HGLAN 1" >>include/config.h ; \
+	echo "TEXT_BASE = 0xFFF00000" >board/linkstation/config.tmp ; \
+	./mkconfig -a linkstation ppc mpc824x linkstation ; \
+	echo "LinkStation HGLAN -- ROM BUILD ..."
+
+linkstation_HDLAN_RAM_config: mrproper
+	@>include/config.h ; \
+	echo "/* HDLAN_RAM */" >>include/config.h ; \
+	echo "#define CONFIG_HLAN 1" >>include/config.h ; \
+	echo "TEXT_BASE = 0x03F00000" >board/linkstation/config.tmp ; \
+	./mkconfig -a linkstation ppc mpc824x linkstation ; \
+	echo "LinkStation HDLAN -- RAM BUILD ..."
+
+linkstation_HDLAN_config: mrproper
+	@>include/config.h ; \
+	echo "/* HDLAN_ROM */" >>include/config.h ; \
+	echo "#define CONFIG_HLAN 1" >>include/config.h ; \
+	echo "TEXT_BASE = 0xFFF00000" >board/linkstation/config.tmp ; \
+	./mkconfig -a linkstation ppc mpc824x linkstation ; \
+	echo "LinkStation HDLAN -- ROM BUILD ..."
 
 MOUSSE_config: unconfig
 	@./mkconfig $(@:_config=) ppc mpc824x mousse

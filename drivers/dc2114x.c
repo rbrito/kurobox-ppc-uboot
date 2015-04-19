@@ -27,14 +27,20 @@
 #include <net.h>
 #include <pci.h>
 
+#if 0
+#define DEBUG_TRACE
+#define DEBUG_TULIP
+#endif
+
 #undef DEBUG_SROM
 #undef DEBUG_SROM2
 
 #undef UPDATE_SROM
 
-/* PCI Registers.
+/*
+ *  PCI Registers.
  */
-#define PCI_CFDA_PSM		0x43
+#define PCI_CFDA_PSM	0x43
 
 #define CFRV_RN		0x000000f0	/* Revision Number */
 
@@ -43,10 +49,12 @@
 
 #define DC2114x_BRK	0x0020		/* CFRV break between DC21142 & DC21143 */
 
-/* Ethernet chip registers.
+/*
+ * Ethernet chip registers.
  */
 #define DE4X5_BMR	0x000		/* Bus Mode Register */
 #define DE4X5_TPD	0x008		/* Transmit Poll Demand Reg */
+#define DE4X5_RPD	0x010		/* Receive Poll Demand Reg */
 #define DE4X5_RRBA	0x018		/* RX Ring Base Address Reg */
 #define DE4X5_TRBA	0x020		/* TX Ring Base Address Reg */
 #define DE4X5_STS	0x028		/* Status Register */
@@ -54,7 +62,8 @@
 #define DE4X5_SICR	0x068		/* SIA Connectivity Register */
 #define DE4X5_APROM	0x048		/* Ethernet Address PROM */
 
-/* Register bits.
+/*
+ * Register bits.
  */
 #define BMR_SWR		0x00000001	/* Software Reset */
 #define STS_TS		0x00700000	/* Transmit Process State */
@@ -64,8 +73,10 @@
 #define OMR_PS		0x00040000	/* Port Select */
 #define OMR_SDP		0x02000000	/* SD Polarity - MUST BE ASSERTED */
 #define OMR_PM		0x00000080	/* Pass All Multicast */
+#define OMR_PMS		0x00000040	/* Promiscuous */
 
-/* Descriptor bits.
+/*
+ * Descriptor bits.
  */
 #define R_OWN		0x80000000	/* Own Bit */
 #define RD_RER		0x02000000	/* Receive End Of Ring */
@@ -85,10 +96,10 @@
 
 #define SROM_HWADD	    0x0014	/* Hardware Address offset in SROM */
 #define SROM_RD		0x00004000	/* Read from Boot ROM */
-#define EE_DATA_WRITE	      0x04	/* EEPROM chip data in. */
+#define EE_DATA_WRITE     0x04	/* EEPROM chip data in. */
 #define EE_WRITE_0	    0x4801
 #define EE_WRITE_1	    0x4805
-#define EE_DATA_READ	      0x08	/* EEPROM chip data out. */
+#define EE_DATA_READ	  0x08	/* EEPROM chip data out. */
 #define SROM_SR		0x00000800	/* Select Serial ROM when set */
 
 #define DT_IN		0x00000004	/* Serial Data In */
@@ -96,6 +107,36 @@
 #define DT_CS		0x00000001	/* Serial ROM Chip Select */
 
 #define POLL_DEMAND	1
+
+#ifndef PCI_VENDOR_ID_ADMTEK
+#  define PCI_VENDOR_ID_ADMTEK 0x1317
+#endif
+#ifndef PCI_DEVICE_ID_ADMTEK_AN983B
+#  define PCI_DEVICE_ID_ADMTEK_AN983B 0x985
+#endif
+
+/* The chip types have been taken from linux-2.4.31
+ * drivers/net/tulip/tulip.h
+ * Only COMET is used for now
+ */
+enum chips {
+	DC21040 = 0,
+	DC21041 = 1,
+	DC21140 = 2,
+	DC21142 = 3, DC21143 = 3,
+	LC82C168,
+	MX98713,
+	MX98715,
+	MX98725,
+	AX88140,
+	PNIC2,
+	COMET,
+	COMPEX9881,
+	I21145,
+	DM910X,
+	CONEXANT,
+};
+static int chip_idx = DC21143;
 
 #ifdef CONFIG_TULIP_FIX_DAVICOM
 #define RESET_DM9102(dev) {\
@@ -108,58 +149,63 @@
 #else
 #define RESET_DE4X5(dev) {\
     int i;\
-    i=INL(dev, DE4X5_BMR);\
-    udelay(1000);\
+    i=0x01A04000;\
     OUTL(dev, i | BMR_SWR, DE4X5_BMR);\
     udelay(1000);\
     OUTL(dev, i, DE4X5_BMR);\
-    udelay(1000);\
-    for (i=0;i<5;i++) {INL(dev, DE4X5_BMR); udelay(10000);}\
     udelay(1000);\
 }
 #endif
 
 #define START_DE4X5(dev) {\
-    s32 omr; \
+    u32 omr; \
     omr = INL(dev, DE4X5_OMR);\
     omr |= OMR_ST | OMR_SR;\
     OUTL(dev, omr, DE4X5_OMR);		/* Enable the TX and/or RX */\
 }
 
 #define STOP_DE4X5(dev) {\
-    s32 omr; \
+    u32 omr; \
     omr = INL(dev, DE4X5_OMR);\
     omr &= ~(OMR_ST|OMR_SR);\
     OUTL(dev, omr, DE4X5_OMR);		/* Disable the TX and/or RX */ \
 }
 
-#define NUM_RX_DESC PKTBUFSRX
+#define NUM_RX_DESC		4
 #ifndef CONFIG_TULIP_FIX_DAVICOM
-	#define NUM_TX_DESC 1			/* Number of TX descriptors   */
+	#define NUM_TX_DESC	2			/* Number of TX descriptors   */
 #else
 	#define NUM_TX_DESC 4
 #endif
-#define RX_BUFF_SZ  PKTSIZE_ALIGN
+#define BUFLEN  1536
 
 #define TOUT_LOOP   1000000
 
 #define SETUP_FRAME_LEN 192
 #define ETH_ALEN	6
+#define ETH_ZLEN	60
 
 struct de4x5_desc {
-	volatile s32 status;
+	volatile u32 status;
 	u32 des1;
 	u32 buf;
 	u32 next;
 };
 
-static struct de4x5_desc rx_ring[NUM_RX_DESC] __attribute__ ((aligned(32))); /* RX descriptor ring         */
-static struct de4x5_desc tx_ring[NUM_TX_DESC] __attribute__ ((aligned(32))); /* TX descriptor ring         */
-static int rx_new;                             /* RX descriptor ring pointer */
-static int tx_new;                             /* TX descriptor ring pointer */
+/* Note: transmit and receive buffers must be longword aligned and
+   longword divisable */
 
-static char rxRingSize;
-static char txRingSize;
+/* TX descriptor ring */
+static struct de4x5_desc tx_ring[NUM_TX_DESC] __attribute__ ((aligned(4)));
+/* TX buffer */
+static unsigned char txb[BUFLEN] __attribute__ ((aligned(32)));
+
+/* RX descriptor ring */
+static struct de4x5_desc rx_ring[NUM_RX_DESC] __attribute__ ((aligned(4)));
+/* RX buffers */
+static unsigned char rxb[NUM_RX_DESC * BUFLEN] __attribute__ ((aligned(32)));
+
+static int rx_new;		/* RX descriptor ring pointer */
 
 #if defined(UPDATE_SROM) || !defined(CONFIG_TULIP_FIX_DAVICOM)
 static void  sendto_srom(struct eth_device* dev, u_int command, u_long addr);
@@ -204,6 +250,7 @@ static void OUTL(struct eth_device* dev, int command, u_long addr)
 static struct pci_device_id supported[] = {
 	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TULIP_FAST },
 	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_21142 },
+	{ PCI_VENDOR_ID_ADMTEK, PCI_DEVICE_ID_ADMTEK_AN983B },
 #ifdef CONFIG_TULIP_FIX_DAVICOM
 	{ PCI_VENDOR_ID_DAVICOM, PCI_DEVICE_ID_DAVICOM_DM9102A },
 #endif
@@ -214,29 +261,44 @@ int dc21x4x_initialize(bd_t *bis)
 {
 	int             	idx=0;
 	int             	card_number = 0;
-	unsigned int           	cfrv;
+	unsigned int        cfrv;
 	unsigned char   	timer;
-	pci_dev_t		devbusfn;
+	pci_dev_t			devbusfn;
 	unsigned int		iobase;
 	unsigned short		status;
 	struct eth_device* 	dev;
+	u16					vendor;
+	u16					device;
 
+#ifdef DEBUG_TULIP
+	printf("%s\n", __FUNCTION__);
+#endif
 	while(1) {
 		devbusfn =  pci_find_devices(supported, idx++);
 		if (devbusfn == -1) {
 			break;
 		}
+		pci_read_config_word(devbusfn, PCI_VENDOR_ID, &vendor);
+		pci_read_config_word(devbusfn, PCI_DEVICE_ID, &device);
 
-		/* Get the chip configuration revision register. */
-		pci_read_config_dword(devbusfn, PCI_REVISION_ID, &cfrv);
+		debug("dc21x4x: devbusfn: %08lX, VID: %08lX, DID: %08lX\n",
+			devbusfn, vendor, device);
+
+		if (vendor == PCI_VENDOR_ID_ADMTEK && \
+		    device == PCI_DEVICE_ID_ADMTEK_AN983B) {
+			chip_idx = COMET;
+		} else {
+			/* Get the chip configuration revision register. */
+			pci_read_config_dword(devbusfn, PCI_REVISION_ID, &cfrv);
 
 #ifndef CONFIG_TULIP_FIX_DAVICOM
-		if ((cfrv & CFRV_RN) < DC2114x_BRK ) {
-			printf("Error: The chip is not DC21143.\n");
-			continue;
-		}
+			if ((cfrv & CFRV_RN) < DC2114x_BRK ) {
+				printf("Error: The chip is not DC21143.\n");
+				idx++;
+				continue;
+			}
 #endif
-
+		}
 		pci_read_config_word(devbusfn, PCI_COMMAND, &status);
 		status |=
 #ifdef CONFIG_TULIP_USE_IO
@@ -286,7 +348,10 @@ int dc21x4x_initialize(bd_t *bis)
 #ifdef CONFIG_TULIP_FIX_DAVICOM
 		sprintf(dev->name, "Davicom#%d", card_number);
 #else
-		sprintf(dev->name, "dc21x4x#%d", card_number);
+		if (chip_idx == COMET)
+			sprintf(dev->name, "COMET#%d", card_number);
+		else
+			sprintf(dev->name, "dc21x4x#%d", card_number);
 #endif
 
 #ifdef CONFIG_TULIP_USE_IO
@@ -302,8 +367,6 @@ int dc21x4x_initialize(bd_t *bis)
 
 		/* Ensure we're not sleeping. */
 		pci_write_config_byte(devbusfn, PCI_CFDA_PSM, WAKEUP);
-
-		udelay(10 * 1000);
 
 #ifndef CONFIG_TULIP_FIX_DAVICOM
 		read_hw_addr(dev, bis);
@@ -321,8 +384,9 @@ static int dc21x4x_init(struct eth_device* dev, bd_t* bis)
 	int		i;
 	int		devbusfn = (int) dev->priv;
 
-	/* Ensure we're not sleeping. */
-	pci_write_config_byte(devbusfn, PCI_CFDA_PSM, WAKEUP);
+#if defined(DEBUG_TULIP) || defined(DEBUG_TRACE)
+	serial_printf("%0lu %s\n", get_timer(0), __FUNCTION__);
+#endif
 
 #ifdef CONFIG_TULIP_FIX_DAVICOM
 	RESET_DM9102(dev);
@@ -330,57 +394,71 @@ static int dc21x4x_init(struct eth_device* dev, bd_t* bis)
 	RESET_DE4X5(dev);
 #endif
 
-	if ((INL(dev, DE4X5_STS) & (STS_TS | STS_RS)) != 0) {
-		printf("Error: Cannot reset ethernet controller.\n");
-		return 0;
-	}
-
 #ifdef CONFIG_TULIP_SELECT_MEDIA
 	dc21x4x_select_media(dev);
 #else
-	OUTL(dev, OMR_SDP | OMR_PS | OMR_PM, DE4X5_OMR);
+	if (chip_idx == COMET) {
+		/* No multicast */
+		OUTL(dev, 0, 0xAC);
+		OUTL(dev, 0, 0xB0);
+	} else {
+		OUTL(dev, OMR_SDP | OMR_PS | OMR_PM, DE4X5_OMR);
+	}
 #endif
 
 	for (i = 0; i < NUM_RX_DESC; i++) {
 		rx_ring[i].status = cpu_to_le32(R_OWN);
-		rx_ring[i].des1 = cpu_to_le32(RX_BUFF_SZ);
-		rx_ring[i].buf = cpu_to_le32(phys_to_bus((u32) NetRxPackets[i]));
-#ifdef CONFIG_TULIP_FIX_DAVICOM
-		rx_ring[i].next = cpu_to_le32(phys_to_bus((u32) &rx_ring[(i+1) % NUM_RX_DESC]));
-#else
-		rx_ring[i].next = 0;
-#endif
+		rx_ring[i].des1 = cpu_to_le32(BUFLEN);
+		rx_ring[i].buf = cpu_to_le32(phys_to_bus((u32)&rxb[i * BUFLEN]));
+		rx_ring[i].next = cpu_to_le32(phys_to_bus((u32)&rx_ring[i+1]));
 	}
+	/* Write the end of list marker to the descriptor lists. */
+	rx_ring[NUM_RX_DESC - 1].des1 |= cpu_to_le32(RD_RER);
+	rx_ring[NUM_RX_DESC - 1].next = cpu_to_le32(phys_to_bus((u32)&rx_ring[0]));
 
-	for (i=0; i < NUM_TX_DESC; i++) {
-		tx_ring[i].status = 0;
-		tx_ring[i].des1 = 0;
-		tx_ring[i].buf = 0;
+	/* Point to the first descriptor */
+	rx_new = 0;
 
-#ifdef CONFIG_TULIP_FIX_DAVICOM
-	tx_ring[i].next = cpu_to_le32(phys_to_bus((u32) &tx_ring[(i+1) % NUM_TX_DESC]));
-#else
-		tx_ring[i].next = 0;
-#endif
-	}
+	/* We only use 1 transmit buffer, but we use 2 descriptors so
+	   transmit engines have somewhere to point to if they feel the need */
 
-	rxRingSize = NUM_RX_DESC;
-	txRingSize = NUM_TX_DESC;
+	tx_ring[0].status = 0;
+	tx_ring[0].des1 = 0;
+	tx_ring[0].buf = cpu_to_le32(phys_to_bus((u32)&txb[0]));
+	tx_ring[0].next = cpu_to_le32(phys_to_bus((u32)&tx_ring[1]));
+
+	/* this descriptor should never get used, since it will never be owned
+	   by the machine (status will always == 0) */
+
+	tx_ring[1].status = 0;
+	tx_ring[1].des1 = 0;
+	tx_ring[1].buf = cpu_to_le32(phys_to_bus((u32)&txb[0]));
+	tx_ring[1].next = cpu_to_le32(phys_to_bus((u32)&tx_ring[0]));
 
 	/* Write the end of list marker to the descriptor lists. */
-	rx_ring[rxRingSize - 1].des1 |= cpu_to_le32(RD_RER);
-	tx_ring[txRingSize - 1].des1 |= cpu_to_le32(TD_TER);
+	tx_ring[1].des1 |= cpu_to_le32(TD_TER);
 
 	/* Tell the adapter where the TX/RX rings are located. */
-	OUTL(dev, phys_to_bus((u32) &rx_ring), DE4X5_RRBA);
-	OUTL(dev, phys_to_bus((u32) &tx_ring), DE4X5_TRBA);
+	OUTL(dev, phys_to_bus((u32) &rx_ring[0]), DE4X5_RRBA);
+	OUTL(dev, phys_to_bus((u32) &tx_ring[0]), DE4X5_TRBA);
+
+	if (chip_idx == COMET) {
+		/* Bit 18 (0x00040000) is reserved in the AN983B */
+		/* datasheet, but it is used by the tulip driver */
+		OUTL(dev, (INL(dev, (DE4X5_OMR)) & ~(OMR_PMS | OMR_PM)) | OMR_PS, DE4X5_OMR);
+		/* Enable automatic Tx underrun recovery */
+		OUTL(dev, INL(dev, 0x88) | 1, 0x88);
+//		OUTL(dev, INL(dev, 0x88) | 0x19, 0x88);
+	}
 
 	START_DE4X5(dev);
 
-	tx_new = 0;
-	rx_new = 0;
+	/* Start receiving */
+	OUTL(dev, POLL_DEMAND, DE4X5_RPD);
 
-	send_setup_frame(dev, bis);
+	if (chip_idx != COMET) {	/* No setup frame needed by COMET */
+		send_setup_frame(dev, bis);
+	}
 
 	return 1;
 }
@@ -389,89 +467,116 @@ static int dc21x4x_send(struct eth_device* dev, volatile void *packet, int lengt
 {
 	int		status = -1;
 	int		i;
+	u32		len = length;
 
 	if (length <= 0) {
 		printf("%s: bad packet size: %d\n", dev->name, length);
 		goto Done;
 	}
 
-	for(i = 0; tx_ring[tx_new].status & cpu_to_le32(T_OWN); i++) {
+	for(i = 0; tx_ring[0].status & cpu_to_le32(T_OWN); i++) {
 		if (i >= TOUT_LOOP) {
-			printf("%s: tx error buffer not ready\n", dev->name);
+			printf(".%s: Tx not ready\n", dev->name);
 			goto Done;
 		}
 	}
 
-	tx_ring[tx_new].buf    = cpu_to_le32(phys_to_bus((u32) packet));
-	tx_ring[tx_new].des1   = cpu_to_le32(TD_TER | TD_LS | TD_FS | length);
-	tx_ring[tx_new].status = cpu_to_le32(T_OWN);
+	/* Disable the TX */
+	OUTL(dev, INL(dev, DE4X5_OMR) & ~OMR_ST, DE4X5_OMR);
 
+	memcpy(txb, (char*)packet, length);
+
+	/* setup the transmit descriptor */
+	tx_ring[0].des1 = cpu_to_le32(TD_LS | TD_FS | length);
+	tx_ring[0].status = cpu_to_le32(T_OWN);
+
+	/* Point to transmit descriptor */
+	OUTL(dev, phys_to_bus((u32) &tx_ring[0]), DE4X5_TRBA);
+
+	/* Enable the TX */
+	OUTL(dev, INL(dev, DE4X5_OMR) | OMR_ST, DE4X5_OMR);
+
+	/* Immediate transmit demand */
 	OUTL(dev, POLL_DEMAND, DE4X5_TPD);
 
-	for(i = 0; tx_ring[tx_new].status & cpu_to_le32(T_OWN); i++) {
+	for(i = 0; tx_ring[0].status & cpu_to_le32(T_OWN); i++) {
 		if (i >= TOUT_LOOP) {
-			printf(".%s: tx buffer not ready\n", dev->name);
+			printf(".%s: Tx Timeout\n", dev->name);
 			goto Done;
 		}
 	}
 
-	if (le32_to_cpu(tx_ring[tx_new].status) & TD_ES) {
-#if 0 /* test-only */
-		printf("TX error status = 0x%08X\n",
-			le32_to_cpu(tx_ring[tx_new].status));
+#ifdef DEBUG_TRACE
+	serial_printf("%0lu Tx L2: %d P: %04X IP: %08X\n",
+					get_timer(0), i, *((u16 *)(packet+0xC)),
+					*((u32 *)(packet+0x1E)));
 #endif
-		tx_ring[tx_new].status = 0x0;
+
+	if (le32_to_cpu(tx_ring[0].status) & TD_ES) {
+#if 1 /* test-only */
+		printf("TX error status = 0x%08X\n",
+			le32_to_cpu(tx_ring[0].status));
+#endif
+		tx_ring[0].status = 0x0;
 		goto Done;
 	}
 
 	status = length;
 
  Done:
-    tx_new = (tx_new+1) % NUM_TX_DESC;
 	return status;
 }
 
 static int dc21x4x_recv(struct eth_device* dev)
 {
-	s32		status;
+	u32		status;
+	int		rx_prv;
 	int		length    = 0;
 
-	for ( ; ; ) {
-		status = (s32)le32_to_cpu(rx_ring[rx_new].status);
-
-		if (status & R_OWN) {
-			break;
-		}
-
-		if (status & RD_LS) {
-			/* Valid frame status.
-			 */
-			if (status & RD_ES) {
-
-				/* There was an error.
-				 */
-				printf("RX error status = 0x%08X\n", status);
-			} else {
-				/* A valid frame received.
-				 */
-				length = (le32_to_cpu(rx_ring[rx_new].status) >> 16);
-
-				/* Pass the packet up to the protocol
-				 * layers.
-				 */
-				NetReceive(NetRxPackets[rx_new], length - 4);
-			}
-
-			/* Change buffer ownership for this frame, back
-			 * to the adapter.
-			 */
-			rx_ring[rx_new].status = cpu_to_le32(R_OWN);
-		}
-
-		/* Update entry information.
-		 */
-		rx_new = (rx_new + 1) % rxRingSize;
+#ifdef DEBUG_TULIP
+	u32 csr5 = INL(dev, DE4X5_STS);
+	if ((csr5 & STS_RS) != 0x00060000) {
+		OUTL(dev, 0x0001ffff, DE4X5_STS);
+		printf("Receive status: 0x%08X\n", csr5);
 	}
+#endif
+
+	status = (u32)le32_to_cpu(rx_ring[rx_new].status);
+	if (status & R_OWN)
+		return 0;
+
+#ifdef DEBUG_TULIP
+	printf("recv status: 0x%08X\n", status);
+#endif
+
+	if (status & RD_LS) {
+#ifdef DEBUG_TRACE
+		serial_printf("rx: %d status: %08X\n", rx_new, status);
+#endif
+		/* Valid frame status */
+		if (status & RD_ES) {
+			/* There was an error */
+			printf("RX error status = 0x%08X\n", status);
+			rx_ring[rx_new].status = cpu_to_le32(R_OWN);
+		} else {
+			/* Received valid frame */
+			length = (int)(le32_to_cpu(rx_ring[rx_new].status) >> 16);
+
+			/* Pass the packet up to the protocol layers. */
+			unsigned char rxdata[BUFLEN];
+			memcpy(rxdata, rxb + rx_new * BUFLEN, length - 4);
+
+			/* Give buffer ownership for this
+			 * frame back to the adapter */
+			rx_ring[rx_new].status = cpu_to_le32(R_OWN);
+
+			/* Pass the received packet to the upper layer */
+			NetReceive(rxdata, length - 4);
+		}
+	}
+
+	/* Update current descriptor index */
+	rx_new = (rx_new + 1) % NUM_RX_DESC;
 
 	return length;
 }
@@ -480,10 +585,12 @@ static void dc21x4x_halt(struct eth_device* dev)
 {
 	int		devbusfn = (int) dev->priv;
 
+#ifdef DEBUG_TULIP
+	printf("%s\n", __FUNCTION__);
+#endif
 	STOP_DE4X5(dev);
 	OUTL(dev, 0, DE4X5_SICR);
 
-	pci_write_config_byte(devbusfn, PCI_CFDA_PSM, SLEEP);
 }
 
 static void send_setup_frame(struct eth_device* dev, bd_t *bis)
@@ -501,30 +608,29 @@ static void send_setup_frame(struct eth_device* dev, bd_t *bis)
 		}
 	}
 
-	for(i = 0; tx_ring[tx_new].status & cpu_to_le32(T_OWN); i++) {
+	for(i = 0; tx_ring[0].status & cpu_to_le32(T_OWN); i++) {
 		if (i >= TOUT_LOOP) {
 			printf("%s: tx error buffer not ready\n", dev->name);
 			goto Done;
 		}
 	}
 
-	tx_ring[tx_new].buf = cpu_to_le32(phys_to_bus((u32) &setup_frame[0]));
-	tx_ring[tx_new].des1 = cpu_to_le32(TD_TER | TD_SET| SETUP_FRAME_LEN);
-	tx_ring[tx_new].status = cpu_to_le32(T_OWN);
+	tx_ring[0].buf = cpu_to_le32(phys_to_bus((u32) &setup_frame[0]));
+	tx_ring[0].des1 = cpu_to_le32(TD_TER | TD_SET| SETUP_FRAME_LEN);
+	tx_ring[0].status = cpu_to_le32(T_OWN);
 
 	OUTL(dev, POLL_DEMAND, DE4X5_TPD);
 
-	for(i = 0; tx_ring[tx_new].status & cpu_to_le32(T_OWN); i++) {
+	for(i = 0; tx_ring[0].status & cpu_to_le32(T_OWN); i++) {
 		if (i >= TOUT_LOOP) {
 			printf("%s: tx buffer not ready\n", dev->name);
 			goto Done;
 		}
 	}
 
-	if (le32_to_cpu(tx_ring[tx_new].status) != 0x7FFFFFFF) {
-		printf("TX error status2 = 0x%08X\n", le32_to_cpu(tx_ring[tx_new].status));
+	if (le32_to_cpu(tx_ring[0].status) != 0x7FFFFFFF) {
+		printf("TX error status2 = 0x%08X\n", le32_to_cpu(tx_ring[0].status));
 	}
-	tx_new = (tx_new+1) % NUM_TX_DESC;
 
 Done:
 	return;
@@ -543,7 +649,7 @@ sendto_srom(struct eth_device* dev, u_int command, u_long addr)
 static int
 getfrom_srom(struct eth_device* dev, u_long addr)
 {
-	s32 tmp;
+	u32 tmp;
 
 	tmp = INL(dev, addr);
 	udelay(1);
@@ -708,19 +814,27 @@ static int write_srom(struct eth_device *dev, u_long ioaddr, int index, int new_
 #ifndef CONFIG_TULIP_FIX_DAVICOM
 static void read_hw_addr(struct eth_device *dev, bd_t *bis)
 {
-	u_short tmp, *p = (u_short *)(&dev->enetaddr[0]);
-	int i, j = 0;
+	if (chip_idx == COMET) {
+		/* COMET reads the ehernet address directly from the EEPROM */
+		*(u32 *)dev->enetaddr = cpu_to_le32(INL(dev, 0xA4));
+		*(u16 *)(dev->enetaddr+4) = cpu_to_le16(INL(dev, 0xA8));
+		*(u32 *)bis->bi_enetaddr = *(u32 *)dev->enetaddr;
+		*(u16 *)(bis->bi_enetaddr+4) = *(u16 *)(dev->enetaddr+4);
+	} else {
+		u_short tmp, *p = (u_short *)(&dev->enetaddr[0]);
+		int i, j = 0;
 
-	for (i = 0; i < (ETH_ALEN >> 1); i++) {
-		tmp = read_srom(dev, DE4X5_APROM, ((SROM_HWADD >> 1) + i));
-		*p = le16_to_cpu(tmp);
-		j += *p++;
-	}
+		for (i = 0; i < (ETH_ALEN >> 1); i++) {
+			tmp=read_srom(dev, DE4X5_APROM, ((SROM_HWADD >> 1)+i));
+			*p = le16_to_cpu(tmp);
+			j += *p++;
+		}
 
-	if ((j == 0) || (j == 0x2fffd)) {
-		memset (dev->enetaddr, 0, ETH_ALEN);
-		debug ("Warning: can't read HW address from SROM.\n");
-		goto Done;
+		if ((j == 0) || (j == 0x2fffd)) {
+			memset (dev->enetaddr, 0, ETH_ALEN);
+			debug ("Warning: can't read HW address from SROM.\n");
+			goto Done;
+		}
 	}
 
 	return;
@@ -769,3 +883,5 @@ static void update_srom(struct eth_device *dev, bd_t *bis)
 #endif	/* UPDATE_SROM */
 
 #endif	/* CFG_CMD_NET && CONFIG_NET_MULTI && CONFIG_TULIP */
+
+/* vim: set ts=4: */

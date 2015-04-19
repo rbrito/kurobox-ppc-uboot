@@ -93,6 +93,7 @@ int	device_register (device_t * dev);
 int	devices_init (void);
 int	devices_done (void);
 int	device_deregister(char *devname);
+int	console_setfile (int file, device_t * dev);
 #ifdef CONFIG_LCD
 int	drv_lcd_init (void);
 #endif
@@ -110,6 +111,9 @@ int	drv_usbtty_init (void);
 #endif
 #ifdef CONFIG_NETCONSOLE
 int	drv_nc_init (void);
+#endif
+#if defined(CFG_CONSOLE_IS_IN_ENV) || defined(CONFIG_SPLASH_SCREEN) || defined(CONFIG_SILENT_CONSOLE)
+device_t *search_device (int flags, char *name);
 #endif
 
 #endif	/* _DEVICES_H_ */

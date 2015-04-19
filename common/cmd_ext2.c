@@ -283,7 +283,8 @@ int do_ext2load (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	sprintf(buf, "%lX", filelen);
 	setenv("filesize", buf);
 
-	return(filelen);
+//	return(filelen);
+	return(0);
 }
 
 U_BOOT_CMD(

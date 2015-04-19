@@ -1,0 +1,631 @@
+
+                     Installing U-Boot for LinkStation
+
+                       For U-Boot port version 2.1.0
+                             16 September 2006
+
+   Copyright (c) 2006 Mihai Georgian
+
+   Permission is granted to copy, distribute and/or modify this document under
+   the terms of the [1]GNU Free Documentation License, Version 1.2 or any later
+   version  published  by the Free Software Foundation; with no Invariant
+   Sections, no Front-Cover Texts, and no Back-Cover Texts. The full text of
+   the license can be obtained by clicking on the above link.
+
+   No  liability  for  the contents of this document can be accepted. The
+   information in this document is provided in good faith but no warranty can
+   be made for its accuracy and the author does not take any responsibility.
+   Use the concepts, examples and information at your own risk. There may be
+   errors and inaccuracies, that could be damaging to your system.
+
+   Use of a term in this document should not be regarded as affecting the
+   validity of any trademark or service mark. Naming of particular products or
+   brands should not be seen as endorsements.
+     _________________________________________________________________
+
+   WARNING
+
+   Flashing the LinkStation with unauthorised firmare voids your warranty. When
+   installing firmware on an embedded computer things can and, sometimes, do go
+   wrong. The power can go down in the middle of the flash operation or the
+   flash write can fail rendering your LinkStation unusable. Please read this
+   entire page carefully before attempting to install U-Boot. 
+
+   If you are not prepared to lose your LinkStation, do not attempt to install
+                                     U-Boot 
+
+  Introduction
+
+   U-Boot  for  the  LinkStation is distributed as a source patch against
+   u-boot-1.1.4. To compile it you will need either a cross toolchain installed
+   on your PC or native development tools installed on your LinkStation. These
+   instructions assume that you are running Linux on a X86 PC and that you are
+   using a cross toolchain.
+
+   To allow testing of U-Boot on your LinkStation without burning it into
+   flash, a kernel module named uloader.o is provided. Uloader allows you to
+   use Linux to load a RAM build of U-Boot and start it. The RAM build of
+   U-Boot is very close to the ROM build. The only differences are the absence
+   of the basic initialisation code (which cannot run from RAM) and the link
+   address. It is strongly recommended that you test U-Boot on your LinkStation
+   using a RAM build before building the ROM version and attempting to burn it
+   into flash. Once you have the RAM build up and running you can use it to
+   install (burn) the ROM version.
+
+  Supported Hardware
+
+   The LinkStation port of U-Boot described in this document supports the
+   following PowerPC based models:
+    1. LinkStation version 1 (model HD-HLAN-1)
+    2. KuroBox standard
+    3. LinkStation HG (model HD-HGLAN)
+    4. KuroBox HG
+
+   This version of U-Boot will certainly not work on the the LinkStation
+   version 2 (model HD-HLAN-2) as the LinkStation version 2 is based on a MIPS
+   processor. The MIPS processor is completely different from the PowerPC
+   processor and attempting to flash a LinkStation version 2 with PowerPC
+      firmware it is guaranteed to make it completely unusable. 
+
+  Get telnet Access
+
+   Try to connect to your LinkStation using telnet. If you see the telnet
+   command prompt, read [2]CGI Exploit (PowerPC) original method of Hacking the
+   LinkStation about how to get telnet access.
+
+   If the above method doesn't work for you, read [3]Turn your LinkStation into
+   a Kuro Box (PowerPC) for other methods to get telnet access.
+
+   The above methods do not work for the LinkStation HG. For this model, the
+   only solution is to load a telnet-enabled version of the firmware. Read the
+   pages about [4]OpenLink and the [5]firmware flasher
+
+   You can also try to flash [6]a modified version of the original firmware.
+
+  Install the Serial Console
+
+   Installing the serial console is not an absolute requirement and it will
+   void your warranty. U-Boot can be installed and controlled without it.
+   However, the serial console will give you the best control over both U-Boot
+                                   and Linux. 
+
+   Read [7]Add a Serial port to the PowerPC Linkstation to learn how to install
+   the serial console.
+
+  Install netcat (nc)
+
+   If you haven't installed the serial console you will need to install netcat
+   (nc). Netcat is a networking utility which reads and writes data across
+   network connections, using the TCP/IP protocol. It comes standard with most
+   Linux  distributions. For more information, visit the netcat home page
+   [8]http://netcat.sourceforge.net or [9]http://www.vulnwatch.org/netcat for
+   the Windows version.
+
+  Get the ELDK
+
+   If you don't have a cross toolchain installed, download the DENX Embedded
+   Linux Development Kit (ELDK) from
+   [10]http://ftp.sunet.se/pub/Linux/distributions/eldk/3.1.1/ppc-linux-x86/iso
+   /ppc-2005-03-07.iso, install it and spend some time getting familiar with
+   it.
+
+  Preparation
+
+   Create the build directory and set the environment variable UBOOT_BUILD to
+   the path to it
+   # mkdir <your_build_directory>
+   # export UBOOT_BUILD=<your_build_directory>
+   # cd $UBOOT_BUILD
+   Download the tarball for u-boot-1.1.4 from
+   [11]ftp://ftp.denx.de/pub/u-boot/u-boot-1.1.4.tar.bz2
+   Download the LinkStation patch, [12]u-boot-1.1.4-list-2.1.0.diff.gz 
+   Download the uloader module for your LinkStation / KuroBox model.
+     * For    the    LinkStation   1   /   KuroBox   standard,   download
+       [13]uloader-2.4.17.tar.gz 
+     * For the LinkStation HG / KuroBox HG, download [14]uloader-2.4.20.tar.gz 
+
+   Untar u-boot-1.1.4 and apply the patch.
+   # tar xjf u-boot-1.1.4.tar.bz2
+   # cd u-boot-1.1.4
+   # gunzip ../u-boot-1.1.4-list-2.01.diff.gz | patch -p1
+
+   Untar the uloader archive for your LinkStation / KuroBox model. The archive
+   contains  the  source  code, a binary module compiled for the original
+   LinkStation kernel and a simple bash script to load and start a RAM build of
+   U-Boot.
+
+   The binary in uloader-2.4.17.tar.gz has been compiled against
+   2.4.17_mvl21-sandpoint. Use only on the LinkStation 1 / KuroBox standard.
+   The binary in uloader-2.4.20.tar.gz has been compiled against
+   2.4.20_mvl31-ppc_linkstation. Use only on the LinkStation HG / KuroBog HG.
+   If you have a different kernel version, you may need to recompile the module
+   for your kernel. Compiling the module requires a fully configured kernel
+   source tree. It is recommended to use the same gcc version as the one used
+   to compile the kernel. There is a small but important difference between the
+   two uloader source archives. The difference is the U-Boot load address. If
+   you compile uloader for the LinkStation 1 / KuroBox standard, use the
+   sources in uloader-2.4.17.tar.gz. If you compile for the LinkStation HG /
+   KuroBox HG, use the sources in uloader-2.4.20.tar.gz. In both cases you
+   need to modify the Makefile to match your development environment. 
+
+   LinkStation 1 / KuroBox standard
+   # cd ..
+   # tar xzf uloader-2.4.17.tar.gz
+   # cd u-boot-1.1.4
+
+   LinkStation HG / KuroBox HG
+   # cd ..
+   # tar xzf uloader-2.4.20.tar.gz
+   # cd u-boot-1.1.4
+
+   Source your ELDK environment
+   # . <path_to_your_ELDK>/config_6xx
+
+  Configure
+
+   Edit include/configs/linkstation.h and set the following variables for your
+   environment:
+
+   CONFIG_IPADDR_LS    -  the IP address of your LinkStation while running
+                          U-Boot (mandatory). The default address is
+                          192.168.11.150.
+   CONFIG_SERVERIP_LS  -  the IP address of the NFS/TFTP/DHCP/BOOTP server,
+                          normally the address of your Linux PC (mandatory).
+                          The default address is 192.168.11.149.
+   CONFIG_NCIP_LS      -  the address of the computer running netcat (nc),
+                          normally the address of your Linux PC (optional).
+                          If the define is missing, CONFIG_NCIP_LS will be
+                          set to the same value as CONFIG_SERVERIP_LS
+
+  RAM Build
+
+   For LinkStation 1 / KuroBox standard run:
+   make linkstation_HDLAN_RAM_config
+   make linkstation_HDLAN_RAM
+
+   The name of the resulting binary is u-boot-hd.ram.bin
+
+   For LinkStation HG / KuroBox HG run:
+   make linkstation_HGLAN_RAM_config
+   make linkstation_HGLAN_RAM
+
+   The name of the resulting binary is u-boot-hg.ram.bin
+
+  Net Console
+
+   The net console is the U-Boot driver which uses the UDP protocol with a
+   default port of 6666 to send the console output to and receive the console
+   input from a remote computer. You need to run netcat on the remote computer
+   to  communicate  with  the  U-Boot  net  console. The communication is
+   bidirectional.  Netcat  will display on your screen the console output
+   received from U-Boot and will send your keyboard input back to U-Boot.
+
+   If U-Boot cannot contact the remote computer, it switches the console to the
+   serial port. To show that it changed the console, U-Boot makes the HDD LED
+   blink with the pattern corresponding to the serial console (see The Reset
+   Button below). The timeout period is 20 sec.
+
+  Minimal Console
+
+   U-Boot for the LinkStation is designed to allow some control over the boot
+   process even in the absence of a console. For this, it uses the power button
+   (the big button at the front) and the reset button (the small red button at
+   the back).
+
+   Before installing U-Boot, when the LinkStation is switched on, the power LED
+   starts  blinking,  the original boot loader starts executing and, very
+   quickly, it starts booting the kernel from flash. If U-Boot is installed,
+   the power LED will change from blinking quickly to blinking very slowly. The
+   blink pattern is the same as the one used to indicate sleep mode in normal
+   operation. When the power LED starts blinking slowly at boot, U-Boot has
+   taken over and it is counting down the boot delay before booting the kernel.
+   The default boot delay is 10 sec. From the moment when the power LED starts
+   blinking slowly and for the duration of the boot delay, you can control the
+   boot process with the power and reset buttons.
+
+    The Power Button
+
+   If you push the power button and keep it pressed for more than 1 sec, the
+   boot  process will stop and the LinkStation will wait for a command. A
+   stopped boot process is indicated by the power LED being lit solid. The
+   effect is the same a pressing 's' on the console.
+
+   A long push of the power button acts as a toggle. If the boot delay count
+   down is in progress, a long push of the power button stops the boot process.
+   If the boot process is stopped (U-Boot is at the command prompt, even if you
+   can't see it), a long push of the power button restarts the boot process
+   resetting the boot delay to its original value. The restart of the boot
+   process is indicated by the power LED blinking slowly.
+
+   By default U-Boot supports three pre-configured boot commands:
+    1. The  first boot command will attempt to load and boot a file named
+       boot/vmlinux.UBoot from the first hard disk partition, /dev/hda1. The
+       file can be in any of the U-Boot bootable formats but uImage is the
+       preferred format. If the file is missing or corrupted, U-Boot will fall
+       back to booting the original kernel from flash.
+    2. The second boot command will boot the original kernel from flash.
+       Please note that the original kernel for the LinkStation 1 / KuroBox
+       standard has a bug in the function that calibrates the decrementer and
+       it will stop for up to 180 sec during boot. This bug is not an U-Boot
+       bug  but  a  kernel bug which is uncovered by the fact that U-Boot
+       activates the decrementer where the original boot loader does not.
+       The original kernel for LinkStation HG / KuroBox HG does not suffer from
+       the above problem.
+    3. The third boot command will attempt to boot in emergency mode (EM). It
+       does this by passing the argument root=/dev/ram0 to the kernel.
+       LinkStation / LinkStation HG owners should avoid booting in EM mode as
+       the root password for this mode on the LinkStation is unknown. 
+       The original kernel for the LinkStation / KuroBox standard and for some
+       of the earlier LinkStation HG / KuroBox HG models ignores the root
+       argument. These models will boot normally from the on-board flash when
+       the  EM  boot command is used. Read the section on EM mode if your
+       LinkStation HG / KuroBox HG has a kernel that doesn't boot in EM mode
+       using this boot command.
+
+   You can cycle through the boot commands with the power button.
+
+   To see which of the three commands U-Boot is going to execute, press the
+   power  button quickly. The HDD LED (the third from the top) will start
+   blinking. The number of times the LED blinks, shows the number of the active
+   boot command. For example, a pattern short on - short off - short on - long
+   off, means that the boot command number 2 is active. U-Boot will repeat the
+   blinking cycle for a total duration of about 5 sec counting from the moment
+   the power button is released.
+
+   A short press of the power button while the HDD LED is blinking will advance
+   the boot command to the next one.
+
+   Changing the boot command does not change the boot status. If the boot is
+   stopped, it will not be restarted. If the boot is in progress, it will not
+   be stopped but the boot delay will be reset to the original value.
+
+    The Reset Button
+
+   Two  consoles are currently configured, the serial console and the net
+   console. The first console is the serial console and the second console is
+   the net console (nc). The net console is the default console.
+
+   The reset button can be used, similarly to the power button, to switch
+   consoles. A press on the reset button (here, it doesn't matter how long you
+   keep the button pressed) displays the currently active console using the HDD
+   LED. Repeatedly pressing the reset button while the HDD LED is blinking will
+   toggle between the two consoles. The blinking pattern is different from the
+   one showing the boot command. The pattern which shows that the second (net)
+   console is active is short off - short on - short off - long on. U-Boot will
+   repeat the blinking cycle for a total duration of about 5 sec counting from
+   the moment the reset button is released.
+
+  Load and Test
+
+   Mount the LinkStation SMB public share and copy the following files to it:
+
+   For LinkStation 1 / KuroBox standard
+   # mount -t smbfs -o password="" //<your_linkstation_name_or_ip>/share/mnt
+   # cp u-boot-hd.ram.bin /mnt
+   # cp ../uloader-2.4.17/uloader.o /mnt
+   # cp ../uloader-2.4.17/u-boot-load-hd.sh /mnt
+   # umount /mmt
+
+   For LinkStation HG / KuroBox HG
+   # mount -t smbfs -o password="" //<your_linkstation_name_or_ip>/share/mnt
+   # cp u-boot-hg.ram.bin /mnt
+   # cp ../uloader-2.4.20/uloader.o /mnt
+   # cp ../uloader-2.4.20/u-boot-load-hg.sh /mnt
+   # umount /mmt
+
+   If you installed the serial port, open another window and use minicom to
+   connect to your LinkStation serial console. The serial port settings are
+   57600,N,8, the same as the settings used by the original Linux kernel.
+
+   Start netcat to communicate with the U-Boot net console. Open another window
+   and run board/linkstation/nc.sh. Nc.sh is a simple script which invokes
+   netcat with the correct options. To quit nc, press ^T (control-T).
+   # cd $UBOOT_BUILD/u-boot-1.1.4
+   # board/linkstation/nc.sh <ip_of_your_linkstation>
+
+   Where <ip_of_your_linkstation> is CONFIG_IPADDR_LS (see Configure U-Boot
+   above). When you run nc.sh nothing will be written to the screen. This is
+   normal as Linux is not using the net console.
+
+   From your original window, use telnet to connect to the LinkStation and
+   launch U-Boot. Replace lshg in the example below with the name / IP address
+   of your LinkStation. Replace myroot with the login you created when you
+   gained  telnet  access.  For  LinkStation  1  /  KuroBox standard, use
+   u-boot-load-hd.sh instead of u-boot-load-hg.sh. Type the commands shown in
+   bold.
+   # telnet lshg
+   Trying 192.168.0.58...
+   Connected to lshg.
+   Escape character is '^]'.
+   BUFFALO INC. Link Station series HD-HGLAN (IEMITSU)
+   HD-HGLAN6C5 login: myroot
+   Linux (none) 2.4.20_mvl31-ppc_linkstation #3 Thu May 19 13:34:18 JST 2005
+   ppc unknown
+   root@HD-HGLAN6C5:~# cd /mnt/share
+   root@HD-HGLAN6C5:/mnt/share# ./u-boot-load-hg.sh
+   root@HD-HGLAN6C5:/mnt/share# exit
+   Connection closed by foreign host.
+   #
+
+   If you have a serial console you should see the initial U-Boot startup
+   messages. Even if the default console is the net console, U-Boot still sends
+   the console output to the serial port until it initialises the network
+   controller.
+   U-Boot 1.1.4 LiSt 2.1.0 (Sep 12 2006 - 23:09:44) LinkStation HG / KuroBox HG
+   CPU: MPC8245 Revision 1.4 at 262.144 MHz: 16 kB I-Cache 16 kB D-Cache
+   DRAM: 128 MB
+   FLASH: 4 MB
+   *** Warning - bad CRC, using default environment
+           00  0b  10ec  8169  0200  ff
+           00  0c  1283  8212  0180  ff
+           00  0e  1033  0035  0c03  ff
+           00  0e  1033  0035  0c03  ff
+           00  0e  1033  00e0  0c03  ff
+   Net:   RTL8169#0
+
+   Watch the net console window. After a few seconds, time needed by U-Boot to
+   initialise the network controller and the IDE controller you should see the
+   U-Boot messages.
+   U-Boot 1.1.4 LiSt 2.1.0 (Sep 12 2006 - 23:09:44) LinkStation HG / KuroBox HG
+   IDE:    Bus 0: OK
+     Device 0: Model: Maxtor 7Y250P0 Firm: YAR41BW0 Ser#: Y62W8PDE
+               Type: Hard Disk
+               Supports 48-bit addressing
+               Capacity: 239372.4 MB = 233.7 GB (490234752 x 512)
+   Boot in 10 seconds ('s' to stop)...
+
+   Press 's' on your keyboard to stop the boot process.
+
+   If  you  want  to  use the serial console, watch the power LED of your
+   LinkStation. When it starts blinking very slowly, use the power button to
+   stop the boot process. Wait for the power LED to go dim and press and hold
+   the power button until the LED lights up brightly indicating that the boot
+   process has stopped. Now press the reset button twice and you should see the
+   U-Boot command prompt (=>) in your minicom window. You can now control
+   U-Boot from the minicom window.
+
+   Using u-boot-load-hd.sh / u-boot-load-hg.sh leads to the above results on
+   devices with the original software. On some LinkStations with modified
+   software, reboot has been modified to send a reboot command to the AVR.
+   This is indicated by the fast blinking of the power LED immediately after
+   running u-boot-load-hd.sh / u-boot-load-hg.sh. Once the AVR receives a
+   reboot command, the reboot process cannot be stopped. The AVR will reboot
+   the LinkStation 5 min after receiving the reboot command.
+   If you find yourself in the above situation you can still test U-Boot by
+   booting your LinkStation with the AVR disabled. Press and hold the reset
+   button and then press the power button. All LEDs will start flashing but
+   your LinkStation will boot normally. Now you can use the procedure
+   described above with one caveat: the AVR being disabled, pressing the
+   buttons will have no effect so you will not be able to test the behaviour
+   of the minimal console. 
+
+   Once  you  get  the  U-Boot command prompt, start testing it. Read the
+   [15]U-Boot documentation and try each command you are interested in.
+
+   Keep in mind that U-Boot interprets all input number as hex numbers. If, for
+   example, you type 256, U-Boot will interpret it as 598 decimal.
+
+   When you are testing memory write commands, do not attempt to write to the
+   first MB of memory (0x00000000 to 0x00100000) as you will be overwriting the
+   exception vectors and U-Boot will crash.
+
+   An important command is flinfo which displays information about the flash
+   chip. If the information displayed is correct for your flash, test the flash
+   erase and flash write commands. To do this, you will need to find an empty
+   sector, one for which each byte is 0xFF. Hint: check the last flash sector
+   first, chances are that it's empty. When you are testing commands that write
+   to the flash, always remember that you can write a single byte but you can
+   only erase whole sectors.
+
+   Be very careful not to write to the flash memory range 0xFFC00000 to
+   0xFFF7FFFF. This area contains the Linux kernel, the initial RAM disk used
+   for EM mode, the bootloader and the configuration sector (which holds the
+   "OKOK" or "NGNG" pattern). The range 0xFFF80000 to 0xFFFFFFFF is the user
+   area and, in most cases, is empty. Always check using the U-Boot command md
+   (memory display) if the flash area you intend to use is empty (all bytes are
+   0xFF). For more information about the flash organisation, read
+   [16]PPCFlashROM for the LinkStation 1 / KuroBox standard or [17]HGFlashROM
+   for the LinkStation HG / KuroBox HG. 
+
+  ROM Build
+
+   Once you are happy with the RAM build, you are ready for the ROM build.
+
+   For LinkStation 1 / KuroBox standard run:
+   make linkstation_HDLAN_config
+   make linkstation_HDLAN
+
+   The name of the resulting binary is u-boot-hd.flash.bin
+
+   For LinkStation HG / KuroBox HG run:
+   make linkstation_HGLAN_config
+   make linkstation_HGLAN
+
+   The name of the resulting binary is u-boot-hg.flash.bin
+
+  Install
+
+   Do not attempt to flash from U-Boot if the power LED is blinking. Your
+   LinkStation is likely to reboot and you will end up with a "brick" 
+   Test the flash commands thoroughly before deciding to burn U-Boot into
+   flash. Write at least 128 kB to the flash to test potential timeout
+   problems 
+   The flash routines in this version of U-Boot for the LinkStation should be
+   able to identify and handle any CFI flash which uses the AMD standard
+   command set. However, they were tested only on a LinkStation with a Fujitsu
+   MBM29PL32TM flash chip and on a LinkStation HG with a ST Micro M29DW324DB
+   flash chip. 
+   Be very careful not to flash your hardware with the wrong U-Boot build.
+   Flashing any RAM build or flashing a ROM build for the LinkStation 1 /
+   KuroBox standard into the LinkStation HG / KuroBox HG or viceversa will
+   "brick" your device. This is especially true if you are flashing from Linux
+      as U-Boot has safety checks to avoid flashing the wrong build. 
+
+    Flashing U-Boot from U-Boot
+
+   The RAM build of U-Boot can be used to load and flash the ROM build. This is
+   the preferred method.
+
+   Boot your LinkStation normally. Open a telnet session and create a directory
+   to hold the U-Boot flash image.
+   root@linkstation:~# cd /mnt/share
+   root@linkstation:/mnt/share# mkdir u-boot
+
+   Copy the U-Boot flash image to your LinkStation SMB share in the directory
+   u-boot.
+
+   Load the RAM build of U-Boot and at the U-Boot command prompt type:
+   => run upgrade
+
+   U-Boot will attempt to load the ROM build from the directory share/u-boot/
+   on the third partition of the hard drive. If the load is successful, it will
+   do the following:
+    1. unprotect the bootloader area;
+    2. erase the bootloader area;
+    3. copy the loaded file to the bootloader area;
+    4. verify the copy;
+
+   Here is the output of run upgrade
+   => run upgrade
+   Loading 0:3:share/u-boot/u-boot-hg.flash.bin
+   174668 bytes read
+   Un-Protected 3 sectors
+   Flash erase: first = 55 @ 0xfff00000
+                last  = 57 @ 0xfff20000
+   Flash erase: Done
+   Erased 3 sectors
+   Copy to Flash... done
+   Total of 174668 bytes were the same
+   =>
+
+   When the above sequence finishes, U-Boot returns to the command prompt (=>).
+
+   Depending on your flash chip, the flash operation can take a long time. Wait
+   patiently and do not try to power down or otherwise interrupt the flash or
+      you will end up with a "brick". 
+
+   Reboot:
+   => reset
+
+   The  power  LED should start blinking slowly and, if you have a serial
+   console, you should see the U-Boot startup messages. Your LinkStation is now
+   running U-Boot.
+
+    Flashing U-Boot from Linux
+
+   Connect to your LinkStation using either the serial port or telnet.
+
+   For LinkStation 1 / KuroBox standard run:
+   # cd /mnt/share/u-boot
+   # dd if=u-boot-hd.flash.bin of=/dev/fl2 bs=1k
+   # cmp u-boot.bin /dev/fl2
+
+   For LinkStation HG / KuroBox HG run:
+   # cd /mnt/share/u-boot
+   # dd if=u-boot-hg.flash.bin of=/dev/mtd1 bs=1k
+   # cmp u-boot.bin /dev/mtd1
+
+   The above commands for LinkStation HG / KuroBox HG will work on devices with
+   the original kernel version 2.4.20 but might to work on earlier devices
+   using kernel version 2.4.17. Please check which device corresponds to the
+   bootloader partition on your hardware.
+
+    If the Flash Fails
+
+   If the flash was not written correctly but U-Boot returns at the command
+   prompt, try to re-run run upgrade.
+
+   If the same happens when you attempt to install U-Boot from Linux, try to dd
+   again.
+
+   If your flash fails completely, for example due to a power failure, all is
+   not  completely  lost. You can still use a JTAG cable to re-flash your
+   Linkstation. Unfortunately, this is a relatively complicated and expensive
+   solution as it involves acquiring or building the JTAG cable and soldering
+   the header for it on the LinkStation motherboard. For more information on
+   how   to  use  a  JTAG  cable  with  the  LinkStation  you  can  visit
+   [18]www.linkstationwiki.net and [19]www.kurobox.com/mwiki.
+
+  EM Mode
+
+             Warning for the LinkStation / LinkStation HG users
+
+   Do not attempt to boot into EM mode using the method described here. The
+   password for the EM mode is unknown for all LinkStation models.
+
+   Once you have U-Boot installed in the on-board flash, you can boot in EM
+   mode even if the third boot command described above doesn't work.
+
+   Stop the boot countdown by pressing 's' in your net console window and, at
+   the U-Boot command prompt, run:
+   => run writeng
+   => run flboot
+
+   The above commands write "NGNG" to 0xFFF70000 and boot from the on-board
+   flash. To revert to normal boot by writing "OKOK" to 0xFFF70000, run:
+   => run writeok
+   => boot
+
+  Advanced configuration
+
+   The  initial  U-Boot  configuration can be changed by editing the file
+   include/configs/linkstation.h.
+
+   In all the examples below, please note the backslash-zero (\0) at the end of
+   the strings and the space-backslash ( \) at the end of each lines and do not
+   change them. 
+
+    Change the name of the default boot file
+
+   Search for the lines containing:
+   "hdpart=0:1\0" \
+   "hdfile=boot/vmlinux.UBoot\0" \
+
+   and  change  them  to the values you want. Partition 0:1 means disk 0,
+   partition 1. Obviously, you can only change the partition number as there is
+   only one disk. The name of the file must be given relative to the root of
+   the partition.
+
+    Change the default console to the serial console
+
+   Search for the lines containing:
+   "stdin=nc\0" \
+   "stdout=nc\0" \
+   "stderr=nc\0" \
+
+   and change them to:
+   "stdin=serial\0" \
+   "stdout=serial\0" \
+   "stderr=serial\0" \
+
+    Change the default boot command to boot from flash
+
+   Search for the lines containing:
+   "bootcmd1=run hdboot;run flboot\0" \
+   "bootcmd2=run flboot\0" \
+
+   and change them to:
+   "bootcmd1=run flboot\0" \
+   "bootcmd2=run hdboot;run flboot\0" \
+
+References
+
+   1. http://www.linuxnotincluded.org.uk/fdl.txt
+   2. http://www.linkstationwiki.net/index.php?title=CGI_Exploit_%28PowerPC%29_original_method_of_Hacking_the_LinkStation
+   3. http://www.linkstationwiki.net/index.php?title=Turn_your_LinkStation_into_a_Kuro_Box_%28PowerPC%29
+   4. http://linkstationwiki.net/index.php?title=OpenLink
+   5. http://linkstationwiki.net/index.php?title=The_LinkStation_firmware_flasher
+   6. http://downloads.linkstationwiki.net/snapshots/HD-HGLAN_149_100_telnet.zip
+   7. http://www.linkstationwiki.net/index.php?title=Add_a_Serial_port_to_the_PowerPC_Linkstation
+   8. http://netcat.sourceforge.net/
+   9. http://www.vulnwatch.org/netcat
+  10. http://ftp.sunet.se/pub/Linux/distributions/eldk/3.1.1/ppc-linux-x86/iso/ppc-2005-03-07.iso
+  11. ftp://ftp.denx.de/pub/u-boot/u-boot-1.1.4.tar.bz2
+  12. http://www.linuxnotincluded.org.uk/linkstation/downloads/u-boot-1.1.4-list-2.1.0.diff.gz
+  13. http://www.linuxnotincluded.org.uk/linkstation/downloads/uloader-2.4.17.tar.gz
+  14. http://www.linuxnotincluded.org.uk/linkstation/downloads/uloader-2.4.20.tar.gz
+  15. http://www.denx.de/wiki/DULG/Manual
+  16. http://linkstationwiki.net/index.php?title=Information/PPCFlashROM
+  17. http://linkstationwiki.net/index.php?title=Information/HGFlashROM
+  18. http://www.linkstationwiki.net/
+  19. http://www.kurobox.com/mwiki

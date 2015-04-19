@@ -35,6 +35,8 @@ extern int ext2fs_devread (int sector, int byte_offset, int byte_len,
 
 /* Magic value used to identify an ext2 filesystem.  */
 #define	EXT2_MAGIC		0xEF53
+/* Magic value used to identify Buffalo's idea of ext2 */
+#define LINKSTATION_MAGIC	0xEF54
 /* Amount of indirect blocks in an inode.  */
 #define INDIRECT_BLOCKS		12
 /* Maximum lenght of a pathname.  */
@@ -851,7 +853,8 @@ int ext2fs_mount (unsigned part_length) {
 		goto fail;
 	}
 	/* Make sure this is an ext2 filesystem.  */
-	if (__le16_to_cpu (data->sblock.magic) != EXT2_MAGIC) {
+	if ((__le16_to_cpu (data->sblock.magic) != EXT2_MAGIC) &&
+	    (__le16_to_cpu (data->sblock.magic) != LINKSTATION_MAGIC)) {
 		goto fail;
 	}
 	data->diropen.data = data;

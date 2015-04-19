@@ -130,7 +130,7 @@ boot_warm:
 
 
 in_flash:
-#if defined(CONFIG_BMW)
+#if defined(CONFIG_BMW) || defined(CONFIG_LINKSTATION)
 	bl early_init_f /* Must be ASM: no stack yet! */
 #endif
 	/*
@@ -155,6 +155,7 @@ in_flash:
 	mtspr	HID0, r2
 	sync
 
+#if !defined(CONFIG_LINKSTATION)
 	/* Allocate Initial RAM in data cache.
 	 */
 	lis	r3, CFG_INIT_RAM_ADDR@h
@@ -175,6 +176,7 @@ in_flash:
 	ori	r3, r3, 0x0080
 	sync
 	mtspr	1011, r3
+#endif /* !CONFIG_LINKSTATION */
 #endif /* !CONFIG_BMW */
 	/*
 	 * Thisk the stack pointer *somewhere* sensible. Doesnt
@@ -195,7 +197,9 @@ in_flash:
 	GET_GOT			/* initialize GOT access			*/
 
 	/* r3: IMMR */
+#if !defined(CONFIG_LINKSTATION)
 	bl	cpu_init_f	/* run low-level CPU init code     (from Flash)	*/
+#endif
 
 	mr	r3, r21
 	/* r3: BOOTFLAG */
@@ -475,7 +479,7 @@ relocate_code:
 	mr	r10, r5		/* Save copy of Destination Address	*/
 
 	mr	r3,  r5				/* Destination Address	*/
-#ifdef CFG_RAMBOOT
+#if defined(CFG_RAMBOOT) && !defined(CONFIG_LINKSTATION)
 	lis	r4, CFG_SDRAM_BASE@h		/* Source      Address	*/
 	ori	r4, r4, CFG_SDRAM_BASE@l
 #else
@@ -688,6 +692,14 @@ trap_init:
 	addi	r7, r7, 0x100		/* next exception vector	*/
 	cmplw	0, r7, r8
 	blt	4b
+
+	mfmsr	r7			/* Exception prefix 0x000 */
+	li	r8,0
+	ori	r8,r8,MSR_IP
+	andc	r7,r7,r8
+	SYNC
+	mtmsr	r7
+	SYNC
 
 	mtlr	r4			/* restore link register	*/
 	blr

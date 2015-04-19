@@ -437,6 +437,10 @@ void board_init_f (ulong bootflag)
 	 */
 	addr -= len;
 	addr &= ~(4096 - 1);
+#ifdef CONFIG_LINKSTATION
+	/* U-Boot code at 1 MB boundary to make it easier to debug */
+	addr &= ~(1048576 - 1);
+#endif
 #ifdef CONFIG_E500
 	/* round down to next 64 kB limit so that IVPR stays aligned */
 	addr &= ~(65536 - 1);
@@ -883,8 +887,10 @@ void board_init_r (gd_t *id, ulong dest_addr)
 	/* Initialize the jump table for applications */
 	jumptable_init ();
 
+#if !defined(CONFIG_LINKSTATION)
 	/* Initialize the console (after the relocation and devices init) */
 	console_init_r ();
+#endif
 
 #if defined(CONFIG_CCM)		|| \
     defined(CONFIG_COGENT)	|| \
@@ -937,6 +943,7 @@ void board_init_r (gd_t *id, ulong dest_addr)
 	if ((s = getenv ("loadaddr")) != NULL) {
 		load_addr = simple_strtoul (s, NULL, 16);
 	}
+	debug("load_addr: %08lx\n", load_addr);
 #if (CONFIG_COMMANDS & CFG_CMD_NET)
 	if ((s = getenv ("bootfile")) != NULL) {
 		copy_filename (BootFile, s, sizeof (BootFile));
@@ -990,6 +997,11 @@ void board_init_r (gd_t *id, ulong dest_addr)
 	WATCHDOG_RESET ();
 	debug ("Reset Ethernet PHY\n");
 	reset_phy ();
+#endif
+
+#if defined(CONFIG_LINKSTATION)
+	/* The LinkStation uses the net console by default */
+	console_init_r ();
 #endif
 
 #ifdef CONFIG_POST

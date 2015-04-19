@@ -29,7 +29,7 @@
 #include "nfs.h"
 #include "bootp.h"
 
-/*#define NFS_DEBUG*/
+#undef NFS_DEBUG
 
 #if ((CONFIG_COMMANDS & CFG_CMD_NET) && (CONFIG_COMMANDS & CFG_CMD_NFS))
 
@@ -180,6 +180,9 @@ rpc_req (int rpc_prog, int rpc_proc, uint32_t *data, int datalen)
 	int sport;
 
 	id = ++rpc_id;
+#ifdef NFS_DEBUG
+        printf ("%s xid: %d, rpc_id: %d\n", __FUNCTION__, id, rpc_id);
+#endif
 	pkt.u.call.id = htonl(id);
 	pkt.u.call.type = htonl(MSG_CALL);
 	pkt.u.call.rpcvers = htonl(2);	/* use RPC version 2 */
@@ -213,6 +216,10 @@ rpc_lookup_req (int prog, int ver)
 {
 	uint32_t data[16];
 
+#ifdef NFS_DEBUG
+        printf ("%s\n", __FUNCTION__);
+#endif
+
 	data[0] = 0; data[1] = 0;	/* auth credential */
 	data[2] = 0; data[3] = 0;	/* auth verifier */
 	data[4] = htonl(prog);
@@ -233,6 +240,10 @@ nfs_mount_req (char *path)
 	uint32_t *p;
 	int len;
 	int pathlen;
+
+#ifdef NFS_DEBUG
+        printf ("%s\n", __FUNCTION__);
+#endif
 
 	pathlen = strlen (path);
 
@@ -258,6 +269,10 @@ nfs_umountall_req (void)
 	uint32_t data[1024];
 	uint32_t *p;
 	int len;
+
+#ifdef NFS_DEBUG
+        printf ("%s\n", __FUNCTION__);
+#endif
 
 	if ((NfsSrvMountPort == -1) || (!fs_mounted)) {
 		/* Nothing mounted, nothing to umount */
@@ -286,6 +301,10 @@ nfs_readlink_req (void)
 	uint32_t *p;
 	int len;
 
+#ifdef NFS_DEBUG
+        printf ("%s\n", __FUNCTION__);
+#endif
+
 	p = &(data[0]);
 	p = (uint32_t *)rpc_add_credentials ((long *)p);
 
@@ -307,6 +326,10 @@ nfs_lookup_req (char *fname)
 	uint32_t *p;
 	int len;
 	int fnamelen;
+
+#ifdef NFS_DEBUG
+        printf ("%s\n", __FUNCTION__);
+#endif
 
 	fnamelen = strlen (fname);
 
@@ -334,6 +357,10 @@ nfs_read_req (int offset, int readlen)
 	uint32_t data[1024];
 	uint32_t *p;
 	int len;
+
+#ifdef NFS_DEBUG
+        printf ("%s\n", __FUNCTION__);
+#endif
 
 	p = &(data[0]);
 	p = (uint32_t *)rpc_add_credentials ((long *)p);
@@ -405,8 +432,13 @@ rpc_lookup_reply (int prog, uchar *pkt, unsigned len)
 
 	if (rpc_pkt.u.reply.rstatus  ||
 	    rpc_pkt.u.reply.verifier ||
-	    rpc_pkt.u.reply.astatus  ||
 	    rpc_pkt.u.reply.astatus) {
+#ifdef NFS_DEBUG
+		printf ("rstatus: %d\n", rpc_pkt.u.reply.rstatus);
+		printf ("verifier: %08lx\n", rpc_pkt.u.reply.verifier);
+		printf ("v2: %08lx\n", rpc_pkt.u.reply.v2);
+		printf ("astatus: %d\n", rpc_pkt.u.reply.astatus);
+#endif
 		return -1;
 	}
 
@@ -433,13 +465,24 @@ nfs_mount_reply (uchar *pkt, unsigned len)
 
 	memcpy ((unsigned char *)&rpc_pkt, pkt, len);
 
-	if (ntohl(rpc_pkt.u.reply.id) != rpc_id)
+	if (ntohl(rpc_pkt.u.reply.id) != rpc_id) {
+#ifdef NFS_DEBUG
+		printf ("rpc_id error. expected: %d, got: %d\n", \
+			rpc_id, ntohl(rpc_pkt.u.reply.id));
+#endif
 		return -1;
+	}
 
 	if (rpc_pkt.u.reply.rstatus  ||
 	    rpc_pkt.u.reply.verifier ||
 	    rpc_pkt.u.reply.astatus  ||
 	    rpc_pkt.u.reply.data[0]) {
+#ifdef NFS_DEBUG
+		printf ("rstatus: %d\n", rpc_pkt.u.reply.rstatus);
+		printf ("verifier: %08lx\n", rpc_pkt.u.reply.verifier);
+		printf ("astatus: %d\n", rpc_pkt.u.reply.astatus);
+		printf ("data[0]: %08lx\n", rpc_pkt.u.reply.data[0]);
+#endif
 		return -1;
 	}
 
@@ -544,7 +587,7 @@ nfs_read_reply (uchar *pkt, unsigned len)
 	struct rpc_t rpc_pkt;
 	int rlen;
 
-#ifdef NFS_DEBUG_nop
+#ifdef NFS_DEBUG
 	printf ("%s\n", __FUNCTION__);
 #endif
 
@@ -601,6 +644,8 @@ NfsHandler (uchar *pkt, unsigned dest, unsigned src, unsigned len)
 	printf ("%s\n", __FUNCTION__);
 #endif
 
+	if (!pkt && !dest && !src && !len) /* ARP packet */
+		return;
 	if (dest != NfsOurPort) return;
 
 	switch (NfsState) {

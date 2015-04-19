@@ -74,6 +74,11 @@ int do_mdm_init = 0;
 extern void mdm_init(void); /* defined in board.c */
 #endif
 
+#ifdef CONFIG_LINKSTATION
+extern int avr_input(void);
+extern void avr_StopBoot(void);
+#endif
+
 /***************************************************************************
  * Watch for 'delay' seconds for autoboot stop or autoboot delay string.
  * returns: 0 -  no key string, allow autoboot
@@ -156,7 +161,14 @@ static __inline__ int abortboot(int bootdelay)
 	/* In order to keep up with incoming data, check timeout only
 	 * when catch up.
 	 */
+	uint64_t onesec = endtick(1);
+	int bootremain = bootdelay;
 	while (!abort && get_ticks() <= etime) {
+		if (get_ticks() >= onesec) {
+			onesec = endtick(1);
+			putc('\r');
+			printf (CONFIG_AUTOBOOT_PROMPT, --bootremain);
+		}
 		for (i = 0; i < sizeof(delaykey) / sizeof(delaykey[0]); i ++) {
 			if (delaykey[i].len > 0 &&
 			    presskey_len >= delaykey[i].len &&
@@ -177,6 +189,20 @@ static __inline__ int abortboot(int bootdelay)
 			}
 		}
 
+#ifdef CONFIG_LINKSTATION
+		int avr_action = avr_input();
+		if (avr_action == -3)
+			/* Abort boot */
+			abort = 1;
+		else if (avr_action == -2) {
+			/* Restart boot */
+			putc('\r');
+			printf (CONFIG_AUTOBOOT_PROMPT, bootdelay);
+			etime = endtick(bootdelay);
+			onesec = endtick(1);
+			bootremain = bootdelay;
+		}
+#endif
 		if (tstc()) {
 			if (presskey_len < presskey_max) {
 				presskey [presskey_len ++] = getc();
@@ -189,6 +215,7 @@ static __inline__ int abortboot(int bootdelay)
 			}
 		}
 	}
+	putc('\n');
 #  if DEBUG_BOOTKEYS
 	if (!abort)
 		puts ("key timeout\n");
@@ -417,6 +444,10 @@ void main_loop (void)
 		int prev = disable_ctrlc(1);	/* disable Control C checking */
 # endif
 
+#ifdef CONFIG_LINKSTATION
+		s = getenv("bootcmd");	/* bootcmd can change (see avr.c) */
+#endif
+
 # ifndef CFG_HUSH_PARSER
 		run_command (s, 0);
 # else
@@ -451,6 +482,10 @@ void main_loop (void)
 	}
 #endif
 
+#ifdef CONFIG_LINKSTATION
+		avr_StopBoot();
+#endif
+
 	/*
 	 * Main Loop for Monitor Command Processing
 	 */
@@ -475,6 +510,10 @@ void main_loop (void)
 			strcpy (lastcommand, console_buffer);
 		else if (len == 0)
 			flag |= CMD_FLAG_REPEAT;
+#ifdef CONFIG_LINKSTATION
+		else if (len == -2)
+			return;
+#endif
 #ifdef CONFIG_BOOT_RETRY_TIME
 		else if (len == -2) {
 			/* -2 means timed out, retry autoboot
@@ -566,6 +605,15 @@ int readline (const char *const prompt)
 		while (!tstc()) {
 			extern void show_activity(int arg);
 			show_activity(0);
+		}
+#endif
+#ifdef CONFIG_LINKSTATION
+		while (!tstc()) {
+			int avr_ret = avr_input();
+			if (avr_ret == -2)
+				return (-2);
+			else if (avr_ret > 0)
+				return avr_ret;
 		}
 #endif
 		c = getc();

@@ -211,6 +211,8 @@ extern void flash_read_factory_serial(flash_info_t * info, void * buffer, int of
 
 #define AMD_ID_LV320B_2 0x221A221A	/* 2d ID word for AM29LV320MB at 0x38 */
 #define AMD_ID_LV320B_3 0x22002200	/* 3d ID word for AM29LV320MB at 0x3c */
+#define AMD_ID_LV320T_2 0x221A221A	/* 2d ID word for AM29LV320MT at 0x38 */
+#define AMD_ID_LV320T_3 0x22012201	/* 3d ID word for AM29LV320MT at 0x3c */
 
 #define AMD_ID_LV640U	0x22D722D7	/* 29LV640U ID (64 M, uniform sectors)	*/
 #define AMD_ID_LV650U	0x22D722D7	/* 29LV650U ID (64 M, uniform sectors)	*/
@@ -241,6 +243,8 @@ extern void flash_read_factory_serial(flash_info_t * info, void * buffer, int of
 #define STM_ID_x800AB	0x005B005B	/* M29W800AB ID (8M = 512K x 16 )	*/
 #define STM_ID_29W320DT 0x22CA22CA	/* M29W320DT ID (32 M, top boot sector) */
 #define STM_ID_29W320DB 0x22CB22CB	/* M29W320DB ID (32 M, bottom boot sect)	*/
+#define STM_ID_29W324DT 0x225C225C	/* M29W324DT ID (32 M, top boot sector) */
+#define STM_ID_29W324DB 0x225D225D	/* M29W324DB ID (32 M, bottom boot sect)	*/
 #define STM_ID_29W040B	0x00E300E3	/* M29W040B ID (4M = 512K x 8)	*/
 
 #define INTEL_ID_28F016S    0x66a066a0	/* 28F016S[VS] ID (16M = 512k x 16)	*/
@@ -339,6 +343,8 @@ extern void flash_read_factory_serial(flash_info_t * info, void * buffer, int of
 #define FLASH_STM800AB	0x0051		/* STM M29WF800AB  (  8M = 512K x 16 )	*/
 #define FLASH_STMW320DT 0x0052		/* STM M29W320DT   (32 M, top boot sector)	*/
 #define FLASH_STMW320DB 0x0053		/* STM M29W320DB   (32 M, bottom boot sect)*/
+#define FLASH_STMW324DT 0x005C		/* STM M29W320DT   (32 M, top boot sector)	*/
+#define FLASH_STMW324DB 0x005D		/* STM M29W320DB   (32 M, bottom boot sect)*/
 #define FLASH_STM320DB	0x00CB		/* STM M29W320DB (4M = 64K x 64, bottom)*/
 #define FLASH_STM800DT	0x00D7		/* STM M29W800DT (1M = 64K x 16, top)	*/
 #define FLASH_STM800DB	0x005B		/* STM M29W800DB (1M = 64K x 16, bottom)*/

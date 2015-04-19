@@ -48,7 +48,10 @@
 *
 *    Indent Options: indent -kr -i8
 ***************************************************************************/
-
+/*
+ * 26 August 2006 Mihai Georgian <u-boot@linuxnotincluded.org.uk>
+ * Modified to use le32_to_cpu and cpu_to_le32 properly
+ */
 #include <common.h>
 #include <malloc.h>
 #include <net.h>
@@ -68,6 +71,7 @@
 static u32 ioaddr;
 
 /* Condensed operations for readability. */
+#define virt_to_bus(addr)	cpu_to_le32(addr)
 #define virt_to_le32desc(addr)	cpu_to_le32(virt_to_bus(addr))
 #define le32desc_to_virt(addr)	bus_to_virt(le32_to_cpu(addr))
 
@@ -413,23 +417,23 @@ static int rtl_recv(struct eth_device *dev)
 	ioaddr = dev->iobase;
 
 	cur_rx = tpc->cur_rx;
-	if ((tpc->RxDescArray[cur_rx].status & OWNbit) == 0) {
-		if (!(tpc->RxDescArray[cur_rx].status & RxRES)) {
+	if ((le32_to_cpu(tpc->RxDescArray[cur_rx].status) & OWNbit) == 0) {
+		if (!(le32_to_cpu(tpc->RxDescArray[cur_rx].status) & RxRES)) {
 			unsigned char rxdata[RX_BUF_LEN];
-			length = (int) (tpc->RxDescArray[cur_rx].
-						status & 0x00001FFF) - 4;
+			length = (int) (le32_to_cpu(tpc->RxDescArray[cur_rx].
+						status) & 0x00001FFF) - 4;
 
 			memcpy(rxdata, tpc->RxBufferRing[cur_rx], length);
 			NetReceive(rxdata, length);
 
 			if (cur_rx == NUM_RX_DESC - 1)
 				tpc->RxDescArray[cur_rx].status =
-				    (OWNbit | EORbit) + RX_BUF_SIZE;
+				cpu_to_le32((OWNbit | EORbit) + RX_BUF_SIZE);
 			else
 				tpc->RxDescArray[cur_rx].status =
-				    OWNbit + RX_BUF_SIZE;
+				cpu_to_le32(OWNbit + RX_BUF_SIZE);
 			tpc->RxDescArray[cur_rx].buf_addr =
-			    virt_to_bus(tpc->RxBufferRing[cur_rx]);
+			    cpu_to_le32(tpc->RxBufferRing[cur_rx]);
 		} else {
 			puts("Error Rx");
 		}
@@ -454,6 +458,7 @@ static int rtl_send(struct eth_device *dev, volatile void *packet, int length)
 	u8 *ptxb;
 	int entry = tpc->cur_tx % NUM_TX_DESC;
 	u32 len = length;
+	int ret;
 
 #ifdef DEBUG_RTL8169_TX
 	int stime = currticks();
@@ -465,39 +470,46 @@ static int rtl_send(struct eth_device *dev, volatile void *packet, int length)
 
 	/* point to the current txb incase multiple tx_rings are used */
 	ptxb = tpc->Tx_skbuff[entry * MAX_ETH_FRAME_SIZE];
+#ifdef DEBUG_RTL8169_TX
+	printf("ptxb: %08X, length: %d\n", ptxb, (int)length);
+#endif
 	memcpy(ptxb, (char *)packet, (int)length);
 
 	while (len < ETH_ZLEN)
 		ptxb[len++] = '\0';
 
-	tpc->TxDescArray[entry].buf_addr = virt_to_bus(ptxb);
+	tpc->TxDescArray[entry].buf_addr = cpu_to_le32(ptxb);
 	if (entry != (NUM_TX_DESC - 1)) {
 		tpc->TxDescArray[entry].status =
-		    (OWNbit | FSbit | LSbit) | ((len > ETH_ZLEN) ?
-						len : ETH_ZLEN);
+		    cpu_to_le32((OWNbit | FSbit | LSbit) |
+				((len > ETH_ZLEN) ? len : ETH_ZLEN));
 	} else {
 		tpc->TxDescArray[entry].status =
-		    (OWNbit | EORbit | FSbit | LSbit) |
-		    ((len > ETH_ZLEN) ? length : ETH_ZLEN);
+		    cpu_to_le32((OWNbit | EORbit | FSbit | LSbit) |
+		    		((len > ETH_ZLEN) ? len : ETH_ZLEN));
 	}
 	RTL_W8(TxPoll, 0x40);	/* set polling bit */
 
 	tpc->cur_tx++;
 	to = currticks() + TX_TIMEOUT;
-	while ((tpc->TxDescArray[entry].status & OWNbit) && (currticks() < to));	/* wait */
+	while ((le32_to_cpu(tpc->TxDescArray[entry].status) & OWNbit)
+				&& (currticks() < to));	/* wait */
 
 	if (currticks() >= to) {
 #ifdef DEBUG_RTL8169_TX
 		puts ("tx timeout/error\n");
 		printf ("%s elapsed time : %d\n", __FUNCTION__, currticks()-stime);
 #endif
-		return 0;
+		ret = 0;
 	} else {
 #ifdef DEBUG_RTL8169_TX
 		puts("tx done\n");
 #endif
-		return length;
+		ret = length;
 	}
+	/* Delay to make net console (nc) work properly */
+	udelay(20);
+	return ret;
 }
 
 static void rtl8169_set_rx_mode(struct eth_device *dev)
@@ -603,13 +615,14 @@ static void rtl8169_init_ring(struct eth_device *dev)
 	for (i = 0; i < NUM_RX_DESC; i++) {
 		if (i == (NUM_RX_DESC - 1))
 			tpc->RxDescArray[i].status =
-			    (OWNbit | EORbit) + RX_BUF_SIZE;
+			cpu_to_le32((OWNbit | EORbit) + RX_BUF_SIZE);
 		else
-			tpc->RxDescArray[i].status = OWNbit + RX_BUF_SIZE;
+			tpc->RxDescArray[i].status =
+			cpu_to_le32(OWNbit + RX_BUF_SIZE);
 
 		tpc->RxBufferRing[i] = &rxb[i * RX_BUF_SIZE];
 		tpc->RxDescArray[i].buf_addr =
-		    virt_to_bus(tpc->RxBufferRing[i]);
+		    cpu_to_le32(tpc->RxBufferRing[i]);
 	}
 
 #ifdef DEBUG_RTL8169
@@ -635,17 +648,23 @@ static void rtl_reset(struct eth_device *dev, bd_t *bis)
 	if (tpc->TxDescArrays == 0)
 		puts("Allot Error");
 	/* Tx Desscriptor needs 256 bytes alignment; */
-	TxPhyAddr = virt_to_bus(tpc->TxDescArrays);
+	TxPhyAddr = tpc->TxDescArrays;
 	diff = 256 - (TxPhyAddr - ((TxPhyAddr >> 8) << 8));
 	TxPhyAddr += diff;
 	tpc->TxDescArray = (struct TxDesc *) (tpc->TxDescArrays + diff);
+#ifdef DEBUG_RTL8169
+	printf("tpc->TxDescArray: %08X\n", tpc->TxDescArray);
+#endif
 
 	tpc->RxDescArrays = rx_ring;
 	/* Rx Desscriptor needs 256 bytes alignment; */
-	RxPhyAddr = virt_to_bus(tpc->RxDescArrays);
+	RxPhyAddr = tpc->RxDescArrays;
 	diff = 256 - (RxPhyAddr - ((RxPhyAddr >> 8) << 8));
 	RxPhyAddr += diff;
 	tpc->RxDescArray = (struct RxDesc *) (tpc->RxDescArrays + diff);
+#ifdef DEBUG_RTL8169
+	printf("tpc->RxDescArray: %08X\n", tpc->RxDescArray);
+#endif
 
 	if (tpc->TxDescArrays == NULL || tpc->RxDescArrays == NULL) {
 		puts("Allocate RxDescArray or TxDescArray failed\n");
@@ -733,7 +752,7 @@ static int rtl_init(struct eth_device *dev, bd_t *bis)
 
 	/* Get MAC address.  FIXME: read EEPROM */
 	for (i = 0; i < MAC_ADDR_LEN; i++)
-		dev->enetaddr[i] = RTL_R8(MAC0 + i);
+		bis->bi_enetaddr[i] = dev->enetaddr[i] = RTL_R8(MAC0 + i);
 
 #ifdef DEBUG_RTL8169
 	printf("MAC Address");
@@ -805,33 +824,68 @@ static int rtl_init(struct eth_device *dev, bd_t *bis)
 			   PHY_Enable_Auto_Nego | PHY_Restart_Auto_Nego);
 		udelay(100);
 
+#ifdef CONFIG_LINKSTATION
+void miconCntl_FanLow(void);
+void miconCntl_FanHigh(void);
+void miconCntl_Eth1000M(int up);
+void miconCntl_Eth100M(int up);
+void miconCntl_Eth10M(int up);
+void miconCntl_5f(void);
+
+		miconCntl_FanLow();
+#endif
+
 		/* wait for auto-negotiation process */
 		for (i = 10000; i > 0; i--) {
 			/* check if auto-negotiation complete */
 			if (mdio_read(PHY_STAT_REG) & PHY_Auto_Neco_Comp) {
 				udelay(100);
 				option = RTL_R8(PHYstatus);
+#if defined(CONFIG_LINKSTATION) && defined(CONFIG_HTGL)
 				if (option & _1000bpsF) {
 #ifdef DEBUG_RTL8169
 					printf("%s: 1000Mbps Full-duplex operation.\n",
 					     dev->name);
 #endif
-				} else {
+					miconCntl_Eth1000M(1);
+				} else if (option & _100bps) {
+#ifdef DEBUG_RTL8169
+					printf("%s: 100Mbps %s-duplexoperation.\n",
+						dev->name,
+						(option & FullDup) ? "Full" : "Half");
+#endif
+					miconCntl_Eth100M(1);
+				} else if (option & _10bps) {
 #ifdef DEBUG_RTL8169
 					printf
-					    ("%s: %sMbps %s-duplex operation.\n",
+					    ("%s: 10Mbps %s-duplex operation.\n",
 					     dev->name,
-					     (option & _100bps) ? "100" :
-					     "10",
-					     (option & FullDup) ? "Full" :
-					     "Half");
+					     (option & FullDup) ? "Full" : "Half");
+#endif
+					miconCntl_Eth100M(1);
+				}
+				miconCntl_5f();
+#else /* !defined(CONFIG_LINKSTATION) || !defined(CONFIG_HTGL) */
+				if (option & _1000bpsF) {
+#ifdef DEBUG_RTL8169
+					printf("%s: 1000Mbps Full-duplex operation.\n",
+						dev->name);
+#endif
+					miconCntl_FanHigh();
+				} else {
+#ifdef DEBUG_RTL8169
+					printk("%s: %sMbps %s-duplex operation.\n",
+						dev->name,
+						(option & _100bps) ? "100" : "10",
+						(option & FullDup) ? "Full" : "Half");
 #endif
 				}
+#endif
 				break;
 			} else {
 				udelay(100);
 			}
-		}		/* end for-loop to wait for auto-negotiation process */
+		}	/* end for-loop to wait for auto-negotiation process */
 
 	} else {
 		udelay(100);
@@ -886,3 +940,5 @@ int rtl8169_initialize(bd_t *bis)
 }
 
 #endif
+
+/* vim: set ts=4: */

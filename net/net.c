@@ -642,6 +642,11 @@ NetSendUDPPacket(uchar *ether, IPaddr_t dest, int dport, int sport, int len)
 {
 	uchar *pkt;
 
+#ifdef ET_DEBUG
+        printf("%s dest: %08lx, dport: %d, sport: %d, len: %d\n",
+		__FUNCTION__, dest, dport, sport, len);
+#endif
+
 	/* convert to new style broadcast */
 	if (dest == 0)
 		dest = 0xFFFFFFFF;
@@ -759,6 +764,8 @@ PingHandler (uchar * pkt, unsigned dest, unsigned src, unsigned len)
 	IPaddr_t tmp;
 	volatile IP_t *ip = (volatile IP_t *)pkt;
 
+	if (!pkt && !dest && !src && !len) /* ARP packet */
+		return;
 	tmp = NetReadIP((void *)&ip->ip_src);
 	if (tmp != NetPingIP)
 		return;
@@ -1147,7 +1154,7 @@ NetReceive(volatile uchar * inpkt, int len)
 	ushort cti = 0, vlanid = VLAN_NONE, myvlanid, mynvlanid;
 
 #ifdef ET_DEBUG
-	printf("packet received\n");
+	printf("%s: packet received\n", __FUNCTION__);
 #endif
 
 	NetRxPkt = inpkt;
@@ -1171,10 +1178,6 @@ NetReceive(volatile uchar * inpkt, int len)
 		mynvlanid = VLAN_NONE;
 
 	x = ntohs(et->et_protlen);
-
-#ifdef ET_DEBUG
-	printf("packet received\n");
-#endif
 
 	if (x < 1514) {
 		/*
@@ -1306,13 +1309,16 @@ NetReceive(volatile uchar * inpkt, int len)
 			/* matched waiting packet's address */
 			if (tmp == NetArpWaitReplyIP) {
 #ifdef ET_DEBUG
-				puts ("Got it\n");
+				puts ("ARP reply IP matches original pkt IP\n");
 #endif
 				/* save address for later use */
 				memcpy(NetArpWaitPacketMAC, &arp->ar_data[0], 6);
 
 #ifdef CONFIG_NETCONSOLE
-				(*packetHandler)(0,0,0,0);
+				if (packetHandler)
+					(*packetHandler)(0,0,0,0);
+				else
+					printf("ARP: NULL packetHandler\n");
 #endif
 				/* modify header, and transmit it */
 				memcpy(((Ethernet_t *)NetArpWaitTxPacket)->et_dest, NetArpWaitPacketMAC, 6);
@@ -1355,7 +1361,10 @@ NetReceive(volatile uchar * inpkt, int len)
 				NetCopyIP(&NetServerIP, &arp->ar_data[ 6]);
 			memcpy (NetServerEther, &arp->ar_data[ 0], 6);
 
-			(*packetHandler)(0,0,0,0);
+			if (packetHandler)
+				(*packetHandler)(0,0,0,0);
+			else
+				printf("ARP: NULL packetHandler\n");
 		}
 		break;
 

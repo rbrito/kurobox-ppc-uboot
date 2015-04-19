@@ -40,7 +40,7 @@
 #endif
 
 extern int interrupt_init_cpu (unsigned *);
-extern void timer_interrupt_cpu (struct pt_regs *);
+extern void timer_interrupt_cpu (struct pt_regs *, ulong timestamp);
 
 static unsigned decrementer_count; /* count value for 1e6/HZ microseconds */
 
@@ -111,7 +111,7 @@ static volatile ulong timestamp = 0;
 void timer_interrupt (struct pt_regs *regs)
 {
 	/* call cpu specific function from $(CPU)/interrupts.c */
-	timer_interrupt_cpu (regs);
+	timer_interrupt_cpu (regs, timestamp);
 
 	/* Restore Decrementer Count */
 	set_dec (decrementer_count);

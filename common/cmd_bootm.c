@@ -187,6 +187,12 @@ int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 			verify = 0;
 		} else
 #endif	/* __I386__ */
+#ifdef CONFIG_LINKSTATION
+		extern boot_os_Fcn do_boot_lskernel;
+		do_boot_lskernel(cmdtp, flag, argc, argv,
+				addr, NULL, verify);
+		return 1; /* Only returns on error */
+#endif
 	    {
 		puts ("Bad Magic Number\n");
 		SHOW_BOOT_PROGRESS (-1);

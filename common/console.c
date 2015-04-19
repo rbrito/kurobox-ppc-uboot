@@ -46,7 +46,7 @@ extern int overwrite_console (void);
 
 #endif /* CFG_CONSOLE_IS_IN_ENV */
 
-static int console_setfile (int file, device_t * dev)
+int console_setfile (int file, device_t * dev)
 {
 	DECLARE_GLOBAL_DATA_PTR;
 	int error = 0;
@@ -456,22 +456,27 @@ int console_init_r (void)
 	gd->flags |= GD_FLG_DEVINIT;	/* device initialization completed */
 
 #ifndef CFG_CONSOLE_INFO_QUIET
+	if (strcmp(stdio_devices[stdout]->name, "serial")) {
+		extern char version_string[];
+		printf ("\n%s\n", version_string);
+	}
+
 	/* Print information */
-	puts ("In:    ");
+	puts ("stdin :   ");
 	if (stdio_devices[stdin] == NULL) {
 		puts ("No input devices available!\n");
 	} else {
 		printf ("%s\n", stdio_devices[stdin]->name);
 	}
 
-	puts ("Out:   ");
+	puts ("stdout:   ");
 	if (stdio_devices[stdout] == NULL) {
 		puts ("No output devices available!\n");
 	} else {
 		printf ("%s\n", stdio_devices[stdout]->name);
 	}
 
-	puts ("Err:   ");
+	puts ("stderr:   ");
 	if (stdio_devices[stderr] == NULL) {
 		puts ("No error devices available!\n");
 	} else {

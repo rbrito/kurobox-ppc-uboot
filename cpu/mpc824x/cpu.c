@@ -92,6 +92,7 @@ int checkdcache (void)
 
 /*------------------------------------------------------------------- */
 
+#ifndef CONFIG_LINKSTATION
 int do_reset (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	ulong msr, addr;
@@ -125,6 +126,7 @@ int do_reset (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	return 1;
 
 }
+#endif
 
 /* ------------------------------------------------------------------------- */
 

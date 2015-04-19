@@ -27,6 +27,7 @@
 
 #include <command.h>
 #include <devices.h>
+#include <console.h>
 #include <net.h>
 
 static char input_buffer[512];
@@ -124,6 +125,26 @@ static void nc_send_packet (const char *buf, int len)
 		output_packet_len = len;
 		NetLoop (NETCONS);	/* wait for arp reply and send packet */
 		output_packet_len = 0;
+#if defined(CFG_CONSOLE_IS_IN_ENV) || defined(CONFIG_SILENT_CONSOLE)
+		if (NetState == NETLOOP_FAIL) {
+			/* ARP failed, fail back to serial console */
+			device_t *idev;
+			device_t *odev;
+
+			idev = search_device(DEV_FLAGS_INPUT,  "serial");
+			odev = search_device(DEV_FLAGS_OUTPUT, "serial");
+
+			console_setfile (stdin,  idev);
+			console_setfile (stdout, odev);
+			console_setfile (stderr, odev);
+
+#if defined(CONFIG_LINKSTATION)
+			void next_cons_choice(int console);
+			/* Console 0 is the serial console */
+			next_cons_choice(0);
+#endif
+		}
+#endif
 		return;
 	}
 
@@ -236,7 +257,8 @@ int nc_tstc (void)
 
 	input_recursion = 1;
 
-	net_timeout = 1;
+//	net_timeout = 1;
+	net_timeout = 50;
 	NetLoop (NETCONS);	/* kind of poll */
 
 	input_recursion = 0;
